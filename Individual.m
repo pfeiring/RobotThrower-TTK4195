@@ -10,6 +10,8 @@ classdef Individual < handle
         torque_series_duration;
 
         fitness;
+
+        simulation_result;
     end
     
     methods
@@ -23,10 +25,44 @@ classdef Individual < handle
             obj.torque_series      		= {};
             obj.torque_series_duration	= settings.torque_series_duration;
             obj.fitness 				= 0;
+            obj.simulation_result       = Simulation_result();
 
-            torque_entry = Torque_entry(settings.base_torque, 0, obj.torque_series_duration);
+            obj.torque_series           = obj.get_random_torque_series();
+        end
 
-            obj.torque_series{1} = torque_entry;
+        function torque_series = get_random_torque_series(obj)
+
+            global settings;
+
+            % Pick a random numbers of torque entries
+
+            number_of_torque_entries = 1 + floor(10 * rand());
+
+            % Distribute cells through torque series duration
+            
+            t = rand(number_of_torque_entries, 1);
+            t = cumsum(t);
+            t = obj.torque_series_duration * t;
+
+            t(end) = obj.torque_series_duration;
+
+            % Pick random torque start for each slice within some interval
+
+            torque_series = cell(number_of_torque_entries, 1);
+
+            for i = 1:number_of_torque_entries
+
+                if (i == 1)
+                    t_start = 0;
+                else
+                    t_start = t(i - 1);
+                end
+
+                t_end  = t(i);
+                torque = settings.base_torque + 20 * 2 * (rand() - 0.5);
+
+                torque_series{i} = Torque_entry(torque, t_start, t_end);
+            end
         end
 
         %% Helper methods
@@ -51,12 +87,39 @@ classdef Individual < handle
 
         	individual = Individual();
 
-        	individual.torque_series    = {};
-        	individual.fitness = obj.fitness;
+        	individual.torque_series       = {};
+        	individual.fitness             = obj.fitness;
+            individual.simulation_result   = Simulation_result();
 
         	for i = 1:length(obj.torque_series)
         		individual.torque_series{i} = obj.torque_series{i}.get_copy();
         	end
+        end
+
+        %% Simulation
+
+        function simulate(obj, model, simulator)
+            obj.simulation_result = simulator.simulate(model, obj.torque_series);
+        end
+
+        %% Constriant violatians
+
+        function flag = has_no_contraint_violations(obj)
+
+            constraint_violations = obj.simulation_result.throwing.constraint_violations;
+
+            flag = constraint_violations.u == 0 && constraint_violations.q_1 == 0 && constraint_violations.dq_1 == 0 && constraint_violations.P == 0;
+        end
+
+        function print_constraint_violations(obj)
+
+            constraint_violations = obj.simulation_result.throwing.constraint_violations;
+
+            fprintf('Constraint violations (L1): \n');
+            fprintf('u: %f\n',       constraint_violations.u);
+            fprintf('q_1: %f\n',     constraint_violations.q_1);
+            fprintf('dq_1: %f\n',    constraint_violations.dq_1);
+            fprintf('P: %f\n',       constraint_violations.P);
         end
 
         %% Genetic methods
@@ -97,13 +160,35 @@ classdef Individual < handle
         	end
         end
 
-        function simulate_and_update_fitness(obj, model, simulator)
+        function update_fitness(obj)
 
-        	model.torque_series = obj.torque_series;
+            throwing = obj.simulation_result.throwing;
+            flight   = obj.simulation_result.flight;
 
-        	simulator.simulate(model);
+            constraint_violations = throwing.constraint_violations;
 
-        	obj.fitness = simulator.flight.distance;
+            obj.fitness = 0;
+
+        	obj.fitness = 1  * obj.fitness + 1 / (1 + constraint_violations.u);
+            obj.fitness = 1  * obj.fitness + 1 / (1 + constraint_violations.q_1);
+            obj.fitness = 1  * obj.fitness + 1 / (1 + constraint_violations.dq_1);
+            obj.fitness = 1  * obj.fitness + 1 / (1 + constraint_violations.P);
+
+            % Penalize if it is not able to throw the ball at all
+
+            if (~throwing.failed)
+                obj.fitness = obj.fitness + 2;
+            end
+
+            % Reward long throws, but this is not very important if the constraints are violated
+            % There should however some reward if the constraint are only slightly off
+
+            if (obj.has_no_contraint_violations())
+
+                obj.fitness = obj.fitness + 5 * flight.distance;
+            else
+                obj.fitness = obj.fitness + min(5 * flight.distance, 5);
+            end
         end
     end
 end

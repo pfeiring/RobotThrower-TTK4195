@@ -35,10 +35,6 @@ classdef Model < handle
         % Gravity
         
         g         = 9.81;
-
-        % Torque series
-
-        torque_series = {};
     end
     
     methods
@@ -122,7 +118,7 @@ classdef Model < handle
 
         %% Second derivative
 
-        function y = get_dd_q(obj, x)
+        function y = get_dd_q(obj, x, torque_series)
 
             q  = x(1:2);
             t  = x(3);
@@ -134,10 +130,10 @@ classdef Model < handle
             
             u = 0;
 
-            for i = 1:length(obj.torque_series)
+            for i = 1:length(torque_series)
 
-                if (obj.torque_series{i}.t_end >= t)
-                    u = obj.torque_series{i}.torque;
+                if (torque_series{i}.t_end >= t)
+                    u = torque_series{i}.torque;
                     break;
                 end
             end

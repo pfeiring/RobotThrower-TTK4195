@@ -57,7 +57,10 @@ classdef Population < handle
             end
             
             fittest_individual = obj.get_fittest_individual();
-            fprintf('\nFittest individual: %f\n', fittest_individual.fitness);
+            fprintf('\nFittest individual: %f\n');
+            fprintf('Fitness: %f\n', fittest_individual.fitness);
+            fprintf('Distance: %f\n', fittest_individual.simulation_result.flight.distance);
+            fittest_individual.print_constraint_violations();
         end
 
         function print_generation_number(obj)
@@ -73,8 +76,18 @@ classdef Population < handle
             xlabel('Generation');
             ylabel('Fitness');
         end
+
+        %% Simulation
+
+        function simulate(obj, model, simulator)
+
+            for i = 1:obj.number_of_individuals
+
+                obj.individuals{i}.simulate(model, simulator);
+            end
+        end
         
-        % Fittest individual
+        %% Fittest individual
         
         function fittest_individual = get_fittest_individual(obj)
             
@@ -88,14 +101,50 @@ classdef Population < handle
             end
         end
 
+        function fittest_individual = get_fittest_individual_with_no_constraint_violations(obj)
+            
+            fittest_individual = {};
+
+            for i = 2:obj.number_of_individuals
+
+                if (obj.individuals{i}.has_no_contraint_violations())
+
+                    if (isempty(fittest_individual))
+                        
+                        fittest_individual = obj.individuals{i};
+                    
+                    elseif (obj.individuals{i}.fitness > fittest_individual.fitness)
+                        
+                        fittest_individual = obj.individuals{i};
+                    end
+                end
+            end
+        end
+
         function store_fittest_individual(obj)
 
             fittest_individual = obj.get_fittest_individual();
 
-            filename = sprintf('fittest_individual_%f', fittest_individual.fitness);
+            filename = sprintf('storage/fittest_individual_%f', fittest_individual.simulation_result.flight.distance);
             filename = strrep(filename, '.', '_');
 
             save(filename, 'fittest_individual');
+        end
+
+        function store_fittest_individual_with_no_constraint_violations(obj)
+
+            fittest_individual = obj.get_fittest_individual_with_no_constraint_violations();
+
+            if (isempty(fittest_individual))
+
+                disp('No individuals that did not violate the constraints.');
+            else
+
+                filename = sprintf('storage/fittest_individual_with_no_constraint_violations_%f', fittest_individual.simulation_result.flight.distance);
+                filename = strrep(filename, '.', '_');
+
+                save(filename, 'fittest_individual');
+            end
         end
 
         %% Selection methods
@@ -189,11 +238,11 @@ classdef Population < handle
             end
         end
 
-        function update_fitness(obj, model, simulator)
+        function update_fitness(obj)
 
             for i = 1:obj.number_of_individuals
 
-                obj.individuals{i}.simulate_and_update_fitness(model, simulator);
+                obj.individuals{i}.update_fitness();
             end
 
             fittest_individual = obj.get_fittest_individual();
